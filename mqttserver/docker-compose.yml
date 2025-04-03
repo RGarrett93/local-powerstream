@@ -1,0 +1,11 @@
+services:
+  mqtt:
+    image: eclipse-mosquitto:2.0.18-openssl
+    container_name: "mqtt"
+    restart: always
+    ports:
+      - 8883:8883
+    volumes:
+      - /home/user/mosquitto/data:/mosquitto/data
+      - /home/user/mosquitto/config:/mosquitto/config
+      - /home/user/mosquitto/logs:/mosquitto/log

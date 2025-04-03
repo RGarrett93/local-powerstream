@@ -5,7 +5,7 @@ Knowledge gathering hub with the goal to control the ecoflow powerstream locally
 If you arrived here, I probably do not need to come up with reasons why you would want to be able to control a device's basic functionality without asking the manufacturer if you are allowed to do so. But I will tell you a bit my story as background info.
 I found the powerstream in my search for a DIY home battery solution (that started by reading this Dutch forum thread: https://gathering.tweakers.net/forum/list_messages/2253584/0) that met all the criteria:
 1) the solar inputs can handle the 24V battery as input
-2) 2) the power output can be set from 0 to 800W through automation.
+2) the power output can be set from 0 to 800W through automation.
 3) The device is certified (by our local regulator) to be plugged in a socket in the house.
 But there is one big problem left to solve: setting the powerstreams output power without going through a cloud API call. Every IOT or smart device in my home connects to a separate network without internet access, that is simply how my setup is. (my phone has constant VPN to my home server and that server has access to the devices)
 
@@ -18,13 +18,47 @@ Making a local API now would undermine this business strategy.
 The other (portable) Ecoflow products had a bluetooth connection, so the app can be used when out camping. And thus could be controlled locally. Their Powerstream does not have this.
 
 # Tricking the device into connecting to my own mosquitto server
-Using adguard I could see that the device is connecting to mqtt-e.ecoflow.com - it was pretty easy to rewrite dns and route this to the IP of my own mosquitto server.
-I was going "YES" to see topics appear and all kinds of telemetry from the device being published. This was the most important step, as this meant I could basically get the device talk to my local server.
-I noticed the outbound topic and the most logical way the server sets the power output is putting something on a corresponding inbound topic.
+Using adguard I could see that the device is connecting to mqtt-e.ecoflow.com - it was pretty easy to add a DNS rewrite and route this to the IP of my own mosquitto server.
+Basically if you have any Ubuntu VM running, copy whatever is in the mqttserver subfolder in your home folder. Edit the docker-compose.yml to match the home folders name. Then go to certs subdir and follow the readme there to create a self-signed certificate.  
+  
+I was going **"YES"** to see topics appear and all kinds of telemetry from the device being published. This was the most important step, as this meant I could basically get the device talk to my local server.
+![alt text](mqttexplorer.png)
+I noticed the upstream topic and the most logical way the server sets the power output is putting something on a corresponding inbound topic.
 The data is in a protobuf binary format, as a next step we need to get this binary format decoded.
-<insert issue here to decode the outbound topic>
+--  
+I created an issue to tackle this one, any help is welcome:
+https://github.com/tomvd/local-powerstream/issues/1
 
-# Impersonating a device to see what the possible inbound command could be
-Using a honeypot-mosquitto server it is possible to log credentials from any connecting client. This worked with my ecoflow river pro.
-I could connect with the batteries credentials to ecoflow mqtt, but since you need to use the device specific client id, the way mqtt works is that this throws out the other connection with the same client id.
-The device will retry connection and throws you out again. I hope if I can set the power setting in the app right before the disconnect I can briefly see a topic appear, but for I did not succeed.
+# Impersonating a device to see what the possible downstream command could be
+In the local mosquitto log you can see it subscribes to a lot of topics:
+````
+/sys/.../thing/protobuf/downstream
+/sys/.../thing/rawData/downstream
+/sys/.../thing/property/cmd
+/sys/.../thing/property/set
+a few /ota/wifi topics - probably not interesting to us
+a few /ota/module topics
+````
+I probably want to find out what the ecoflow mothership is sending to the device on those 4 first topics...   
+
+Using a honeypot-mosquitto server (little python app you can find in the honeypot folder) it is possible to log credentials from any connecting client.
+You should see something like this:
+````
+2025-04-01 19:47:59,749 - MQTT TLS Honeypot started on port 8883
+2025-04-01 19:48:01,303 - Connection from ('192.168.0.227', 50249)
+2025-04-01 19:48:01,814 - SSL/TLS handshake successful with ('192.168.0.227', 50249)
+2025-04-01 19:48:01,830 - data recvb"\x10h\x00\x04MQTT\x05\xc2\x00x\x00\x00\x10HW51012345678901\x00'device-01234567890123456789012345678901\x00 01234567890123456789012345678901"
+2025-04-01 19:48:01,831 - Error parsing MQTT packet: index out of range
+````
+(I changed the credentials to fake ones)
+With the self-signed certificate, clientid HW51012345678901, userid device-01234567890123456789012345678901, password 01234567890123456789012345678901
+you can actually connect to mqtt-e.ecoflow.com:8883 using mqtt explorer.  
+For this test I probably need to connect the device also back to the official mqtt explorer.
+But since you need to use the device specific client id, the way mqtt works is that this throws out the other connection with the same client id. The device will retry connection and throws you out again. I hoped to see a downstream topic to appear when changing a setting in the app right before the disconnect, but for now I did not succeed.  
+Again any help is welcome, the follow-up ticket is this one:
+-- https://github.com/tomvd/local-powerstream/issues/2
+
+# psbridge - a small bridge app between the ecoflow mosquitto server and my home assistant mosquitto server
+This is more a matter of taste but I wanted to use tiny Java/micronaut app which is also easy to build and deploy as a container.
+Java has excellent mqtt and protobuf libraries. And my mother tongue is Java, hence this choice.  
+-- I am working on it: https://github.com/tomvd/local-powerstream/issues/3
