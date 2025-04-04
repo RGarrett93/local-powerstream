@@ -14,8 +14,9 @@ I mailed support with my concerns, mostly because I wanted to see what their res
 Ecoflow is looking into a paid subscription model for functionality that depends on the cloud. The powerstream is relativly cheap (compared to their batteries). They go out of stock in every country. They need to get people hooked on the cloud functionality and want to set up a subscription model later and sell this as "paying for usage of their infrastructure".
 Making a local API now would undermine this business strategy.
 
-# The BLE route will not work
-The other (portable) Ecoflow products had a bluetooth connection, so the app can be used when out camping. And thus could be controlled locally. Their Powerstream does not have this.
+# The BLE route ~~will not work~~ might work?
+It seems the powerstream can be somewhat controlled with bluetooth,
+but I have no experience in bluetooth reverse engineering also since bluetooth is short ranged it is less practical.
 
 # Tricking the device into connecting to my own mosquitto server
 Using adguard I could see that the device is connecting to mqtt-e.ecoflow.com - it was pretty easy to add a DNS rewrite and route this to the IP of my own mosquitto server.
