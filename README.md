@@ -53,10 +53,9 @@ You should see something like this:
 (I changed the credentials to fake ones)
 With the self-signed certificate, clientid HW51012345678901, userid device-01234567890123456789012345678901, password 01234567890123456789012345678901
 you can actually connect to mqtt-e.ecoflow.com:8883 using mqtt explorer.  
-For this test I probably need to connect the device also back to the official mqtt explorer.
-But since you need to use the device specific client id, the way mqtt works is that this throws out the other connection with the same client id. The device will retry connection and throws you out again. I hoped to see a downstream topic to appear when changing a setting in the app right before the disconnect, but for now I did not succeed.  
-Again any help is welcome, the follow-up ticket is this one:
--- https://github.com/tomvd/local-powerstream/issues/2
+Then I used the nodered plugin to change the output power of the device, which actually mimics the command that is send by the app.
+Suddenly I see the topic and payload appear on MQTT explorer, which means we probably now can use that one to control the powerstream locally.
+![alt text](mqttexplorer2.png)
 
 # psbridge - a small bridge app between the ecoflow mosquitto server and my home assistant mosquitto server
 This is more a matter of taste but I wanted to use tiny Java/micronaut app which is also easy to build and deploy as a container.
