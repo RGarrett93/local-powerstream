@@ -57,6 +57,9 @@ you can actually connect to mqtt-e.ecoflow.com:8883 using mqtt explorer.
 Then I used the nodered plugin to change the output power of the device, which actually mimics the command that is send by the app.
 Suddenly I see the topic and payload appear on MQTT explorer, which means we probably now can use that one to control the powerstream locally.
 ![alt text](mqttexplorer2.png)
+However, we are not there yet. I can send commands to the device to change its power level, and it replies, but does not do anything yet.
+You can follow the latest tests in this thread  
+https://github.com/tomvd/local-powerstream/issues/4
 
 # psbridge - a small bridge app between the ecoflow mosquitto server and my home assistant mosquitto server
 This is more a matter of taste but I wanted to use tiny Java/micronaut app which is also easy to build and deploy as a container.
