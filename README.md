@@ -2,33 +2,20 @@
 Knowledge gathering hub with the goal to control the ecoflow powerstream locally without internet
 
 # History
-If you arrived here, I probably do not need to come up with reasons why you would want to be able to control a device's basic functionality without asking the manufacturer if you are allowed to do so. But I will tell you a bit my story as background info.
 I found the powerstream in my search for a DIY home battery solution (that started by reading this Dutch forum thread: https://gathering.tweakers.net/forum/list_messages/2253584/0) that met all the criteria:
 1) the solar inputs can handle the 24V battery as input
 2) the power output can be set from 0 to 800W through automation.
 3) The device is certified (by our local regulator) to be plugged in a socket in the house.
-But there is one big problem left to solve: setting the powerstreams output power without going through a cloud API call. Every IOT or smart device in my home connects to a separate network without internet access, that is simply how my setup is. (my phone has constant VPN to my home server and that server has access to the devices)
 
-# Asking ecoflow nicely will not work
-I mailed support with my concerns, mostly because I wanted to see what their response would be. The response was a very general "we see what you ask for and pass it on to our development team". I do not think that not having a local API is caused by the development team. This is 100% a business decision.
-Ecoflow is looking into a paid subscription model for functionality that depends on the cloud. The powerstream is relativly cheap (compared to their batteries). They go out of stock in every country. They need to get people hooked on the cloud functionality and want to set up a subscription model later and sell this as "paying for usage of their infrastructure".
-Making a local API now would undermine this business strategy.
-
-# The BLE route ~~will not work~~ might work?
-It seems the powerstream can be somewhat controlled with bluetooth,
-but I have no experience in bluetooth reverse engineering also since bluetooth is short ranged it is less practical.
+But there is one big problem left to solve: make it work without the Ecoflow cloud. (for various reasons) 
 
 # Tricking the device into connecting to my own mosquitto server
-Using adguard I could see that the device is connecting to mqtt-e.ecoflow.com - it was pretty easy to add a DNS rewrite and route this to the IP of my own mosquitto server.
-Basically if you have any Ubuntu VM running, copy whatever is in the mqttserver subfolder in your home folder. Edit the docker-compose.yml to match the home folders name. Then go to certs subdir and follow the readme there to create a self-signed certificate.  
+Using Adguard (you can also use pihole) I could see that the device is connecting to mqtt-e.ecoflow.com - it was pretty easy to add a DNS rewrite and route this to the IP of my own mosquitto server.
+Basically if you have any Ubuntu VM running, copy whatever is in the mqttserver subfolder in your home folder. Edit the docker-compose.yml to match the home folders name. Then go to certs subdir and follow the readme there to create a self-signed certificate. Compose it all up and off we go.  
   
-I was going **"YES"** to see topics appear and all kinds of telemetry from the device being published. This was the most important step, as this meant I could basically get the device talk to my local server.
+If you connect with MQTT explorer to your local server and see topics appear and all kinds of telemetry from the device being published as shown below you are all set to controle the device locally:
 ![alt text](mqttexplorer.png)
-I noticed the upstream topic and the most logical way the server sets the power output is putting something on a corresponding inbound topic.
-The data is in a protobuf binary format, as a next step we need to get this binary format decoded.
---  
-I created an issue to tackle this one, any help is welcome:
-https://github.com/tomvd/local-powerstream/issues/1
+The data is in a protobuf binary format, as a next step we need to get this binary format decoded. Later I found out that using https://mqttx.app/ and set the output to base64 was actually much better to handle binary communication. The proto definitions are very similar to the ones already found in the decompiled android app. (There is a the inverter heartbeat for example that contains all kind of info like PV input voltage)
 
 # Impersonating a device to see what the possible downstream command could be
 In the local mosquitto log you can see it subscribes to a lot of topics:
@@ -55,13 +42,46 @@ You should see something like this:
 With the self-signed certificate, clientid HW51012345678901, userid device-01234567890123456789012345678901, password 01234567890123456789012345678901
 you can actually connect to mqtt-e.ecoflow.com:8883 using mqtt explorer.  
 Then I used the nodered plugin to change the output power of the device, which actually mimics the command that is send by the app.
-Suddenly I see the topic and payload appear on MQTT explorer, which means we probably now can use that one to control the powerstream locally.
+Suddenly I see the topic and payload appear on MQTT explorer, which means we probably now can use that one to control the powerstream locally. It uses the cmd topic for that.
 ![alt text](mqttexplorer2.png)
-However, we are not there yet. I can send commands to the device to change its power level, and it replies, but does not do anything yet.
-You can follow the latest tests in this thread  
-https://github.com/tomvd/local-powerstream/issues/4
+You can use this site to decode base64 protobuf messages (without needing the proto definition file): https://protobuf-decoder.netlify.app/
+
+A few tests later, I could control the device by creating my own protobuf message, in my little java app like this: 
+````
+    public byte[] convert(int watts, String sn) {
+        int deciWatts = Math.max(1, watts*10);
+        setMessage setMessage = com.tomvd.psbridge.setMessage.newBuilder()
+                .setHeader(com.tomvd.psbridge.setHeader.newBuilder()
+                        .setPdata(com.tomvd.psbridge.setValue.newBuilder()
+                                .setValue(deciWatts)
+                                .build())
+                        .setSrc(32)
+                        .setDest(53)
+                        .setDSrc(1)
+                        .setDDest(1)
+                        .setCheckType(3)
+                        .setCmdFunc(20)
+                        .setCmdId(129)
+                        .setDataLen(deciWatts > 127?3:2)
+                        .setNeedAck(1)
+                        .setSeq((int)(System.currentTimeMillis()/1000))
+                        .setVersion(19)
+                        .setPayloadVer(1)
+                        .setFrom("ios")
+                        .setDeviceSn(sn)
+                        .build())
+                .build();
+        return setMessage.toByteArray();
+    }
+````
+That is the code to create the payload. You just have to publish that to the /sys/.../thing/property/cmd topic. 
 
 # psbridge - a small bridge app between the ecoflow mosquitto server and my home assistant mosquitto server
 This is more a matter of taste but I wanted to use tiny Java/micronaut app which is also easy to build and deploy as a container.
-Java has excellent mqtt and protobuf libraries. And my mother tongue is Java, hence this choice.  
--- I am working on it: https://github.com/tomvd/local-powerstream/issues/3
+Java has excellent mqtt and protobuf libraries. And my mother tongue is Java, hence this choice.   
+This app is still under development!
+
+# disclaimer
+The app, docker file, python script and everything I described here comes without warranties and limited support, it was created for my own use and made public to inspire and educate other people to create or extend their own plugins or apps. If you get into trouble with unofficial use of the device, support will probably not help you.   
+I will not take any requests to support other devices.   
+The intention of this project is not to do harm to Ecoflow, only to make use of my device without giving it a constant internet connection. 
