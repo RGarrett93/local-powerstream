@@ -79,7 +79,8 @@ That is the code to create the payload. You just have to publish that to the /sy
 # psbridge - a small bridge app between the ecoflow mosquitto server and my home assistant mosquitto server
 This is more a matter of taste but I wanted to use tiny Java/micronaut app which is also easy to build and deploy as a container.
 Java has excellent mqtt and protobuf libraries. And my mother tongue is Java, hence this choice.   
-This app is still under development!
+This app is still under development, but it already allows for getting powerstream parameters and setting the output voltage through homeassistant (it send an mqtt discovery topic and then your powerstream will appear):   
+![alt text](powerstream1.png)
 
 # disclaimer
 The app, docker file, python script and everything I described here comes without warranties and limited support, it was created for my own use and made public to inspire and educate other people to create or extend their own plugins or apps. If you get into trouble with unofficial use of the device, support will probably not help you.   
