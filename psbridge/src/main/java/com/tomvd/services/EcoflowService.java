@@ -1,5 +1,6 @@
 package com.tomvd.services;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -20,6 +21,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509ExtendedTrustManager;
+import java.io.IOException;
 import java.net.Socket;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -38,6 +40,7 @@ public class EcoflowService implements DeviceService {
 
     private String upstreamTopic;
     private String commandTopic;
+    private String batteryTopic;
 
     @Inject
     public EcoflowService(ProtobufConverter converter, DevicesConfiguration devicesConfiguration, MQTTConfiguration mqttConfig) {
@@ -50,7 +53,10 @@ public class EcoflowService implements DeviceService {
                     + "/thing/protobuf/upstream";
             commandTopic = "/sys/75/" + devicesConfiguration.getPowerstreams().getFirst()
                     + "/thing/property/cmd";
+            batteryTopic = "/sys/72/" + devicesConfiguration.getBatteries().getFirst()
+                    + "/thing/property/post";
         }
+        objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
     }
 
     @Override
@@ -77,7 +83,10 @@ public class EcoflowService implements DeviceService {
 
                 @Override
                 public void messageArrived(String topic, MqttMessage mqttMessage) {
-                    handleMessage(topic, mqttMessage);
+                    if (topic.equals(upstreamTopic))
+                        handleProtobufMessage(topic, mqttMessage);
+                    if (topic.equals(batteryTopic))
+                        handleJsonMessage(topic, mqttMessage);
                 }
 
                 @Override
@@ -87,6 +96,8 @@ public class EcoflowService implements DeviceService {
             });
             ecoflowClient.connect(options);
             ecoflowClient.subscribe(upstreamTopic, 1);
+            if (!devicesConfiguration.getBatteries().isEmpty())
+                ecoflowClient.subscribe(batteryTopic, 1);
             if (ecoflowClient.isConnected()) {
                 publishPowerSetting(0);
             }
@@ -134,14 +145,13 @@ public class EcoflowService implements DeviceService {
         ecoflowClient.publish(commandTopic, msg);
     }
 
-    private void handleMessage(String topic, MqttMessage message) {
+    private void handleProtobufMessage(String topic, MqttMessage message) {
         try {
             LOG.debug("Received message on topic {}", topic);
 
             byte[] payload = message.getPayload();
             InverterHeartbeat inverterHeartbeat = converter.convert(payload);
             if (inverterHeartbeat != null && sl.getApplicationService().isOnline()) {
-                objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
                 ObjectNode jsonNode = objectMapper.createObjectNode();
 
                 jsonNode.put("invOutputWatts", inverterHeartbeat.getInvOutputWatts()/10.0);
@@ -154,11 +164,32 @@ public class EcoflowService implements DeviceService {
                 jsonNode.put("last_updated", System.currentTimeMillis());
 
                 String json = objectMapper.writeValueAsString(jsonNode);
-                sl.getApplicationService().publishJsonState(json);
+                sl.getApplicationService().publishJsonState(devicesConfiguration.getPowerstreams().getFirst(), json);
             }
 
         } catch (Exception e) {
             LOG.error("Error processing message", e);
+        }
+    }
+
+    private void handleJsonMessage(String topic, MqttMessage mqttMessage) {
+        try {
+            JsonNode rootNode = objectMapper.createParser(mqttMessage.getPayload()).readValueAsTree();
+            String typeCode = rootNode.get("typeCode").asText();
+            switch (typeCode) {
+                case "bmsStatus":
+                    JsonNode params = rootNode.get("params");
+                    ObjectNode jsonNode = objectMapper.createObjectNode();
+
+                    jsonNode.put("soc", params.get("f32ShowSoc").asDouble());
+                    jsonNode.put("last_updated", System.currentTimeMillis());
+
+                    String json = objectMapper.writeValueAsString(jsonNode);
+                    sl.getApplicationService().publishJsonState(devicesConfiguration.getBatteries().getFirst(), json);
+                    break;
+            }
+        } catch (IOException | MqttException e) {
+            throw new RuntimeException(e);
         }
     }
 

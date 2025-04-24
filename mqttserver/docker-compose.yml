@@ -9,3 +9,11 @@ services:
       - /home/user/mosquitto/data:/mosquitto/data
       - /home/user/mosquitto/config:/mosquitto/config
       - /home/user/mosquitto/logs:/mosquitto/log
+  psbridge:
+    image: ghcr.io/tomvd/psbridge:latest
+    container_name: "psbridge"
+    restart: always
+    volumes:
+      - /home/user/psbridge/application.yml:/home/app/application.yml
+    environment:
+      MICRONAUT_CONFIG_FILES: '/home/app/application.yml'
