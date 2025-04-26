@@ -9,17 +9,20 @@ import jakarta.inject.Inject;
 public class ServiceLocator {
     private final DeviceService deviceService;
     private final ApplicationService applicationService;
+    private final SmartService smartService;
 
     @Inject
-    public ServiceLocator(DeviceService deviceService, ApplicationService applicationService) {
+    public ServiceLocator(DeviceService deviceService, ApplicationService applicationService, SmartService smartService) {
         this.deviceService = deviceService;
         this.applicationService = applicationService;
+        this.smartService = smartService;
     }
 
     @PostConstruct
     public void init() {
         this.deviceService.setSl(this);
         this.applicationService.setSl(this);
+        this.smartService.setSl(this);
     }
 
     public DeviceService getDeviceService() {
@@ -29,4 +32,6 @@ public class ServiceLocator {
     public ApplicationService getApplicationService() {
         return applicationService;
     }
+
+    public SmartService getSmartService() {return smartService;}
 }

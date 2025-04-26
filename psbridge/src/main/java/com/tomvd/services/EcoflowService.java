@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.tomvd.configuration.DevicesConfiguration;
 import com.tomvd.configuration.MQTTConfiguration;
 import com.tomvd.converter.ProtobufConverter;
+import com.tomvd.model.PowerStreamData;
 import com.tomvd.psbridge.InverterHeartbeat;
 import io.micronaut.context.event.StartupEvent;
 import io.micronaut.runtime.event.annotation.EventListener;
@@ -42,6 +43,8 @@ public class EcoflowService implements DeviceService {
     private String commandTopic;
     private String batteryTopic;
 
+    private PowerStreamData data;
+
     @Inject
     public EcoflowService(ProtobufConverter converter, DevicesConfiguration devicesConfiguration, MQTTConfiguration mqttConfig) {
         this.objectMapper = new ObjectMapper();
@@ -63,6 +66,9 @@ public class EcoflowService implements DeviceService {
     public void setSl(ServiceLocator sl) {
         this.sl = sl;
     }
+
+    @Override
+    public PowerStreamData getPowerStreamData() {return data;}
 
     @EventListener
     public void onStartup(StartupEvent event) {
@@ -119,17 +125,21 @@ public class EcoflowService implements DeviceService {
     }
 
     @Override
-    public void publishPowerSetting(int i) throws MqttException {
+    public void publishPowerSetting(int i) {
         //LOG.info("Publishing to powerstream");
         byte[] payload = converter.getPowerSettingPayload(i, devicesConfiguration.getPowerstreams().getFirst());
         MqttMessage msg = new MqttMessage();
         msg.setPayload(payload);
         msg.setQos(0);
         msg.setRetained(false);
-        ecoflowClient.publish(commandTopic, msg);
+        try {
+            ecoflowClient.publish(commandTopic, msg);
+        } catch (MqttException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    @Scheduled(fixedDelay = "3s")
+    @Scheduled(fixedDelay = "5s")
     void executeHB() throws MqttException {
         if (ecoflowClient != null && ecoflowClient.isConnected() && sl.getApplicationService().isOnline()) {
             publishHB();
@@ -165,6 +175,11 @@ public class EcoflowService implements DeviceService {
 
                 String json = objectMapper.writeValueAsString(jsonNode);
                 sl.getApplicationService().publishJsonState(devicesConfiguration.getPowerstreams().getFirst(), json);
+
+                data = new PowerStreamData(
+                        (inverterHeartbeat.getPv1InputVolt()+inverterHeartbeat.getPv2InputVolt())/20.0,
+                        inverterHeartbeat.getInvOutputWatts()/10
+                );
             }
 
         } catch (Exception e) {

@@ -1,8 +1,9 @@
 package com.tomvd.services;
 
-import org.eclipse.paho.client.mqttv3.MqttException;
+import com.tomvd.model.PowerStreamData;
 
 public interface DeviceService {
-    void publishPowerSetting(int i) throws MqttException;
+    void publishPowerSetting(int i);
     void setSl(ServiceLocator sl);
+    PowerStreamData getPowerStreamData();
 }

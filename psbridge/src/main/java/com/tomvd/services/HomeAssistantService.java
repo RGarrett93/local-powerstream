@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.tomvd.configuration.DevicesConfiguration;
 import com.tomvd.configuration.MQTTConfiguration;
+import com.tomvd.configuration.SmartConfiguration;
 import io.micronaut.context.event.StartupEvent;
 import io.micronaut.runtime.event.annotation.EventListener;
 import jakarta.inject.Inject;
@@ -21,17 +22,20 @@ public class HomeAssistantService implements ApplicationService {
     private final ObjectMapper objectMapper;
     private final DevicesConfiguration devicesConfiguration;
     private final MQTTConfiguration mqttConfig;
+    private final SmartConfiguration smartConfiguration;
     private ServiceLocator sl;
     private final String powerstreamId;
     private final String batteryId;
-
     private final String targetTopic = "ecoflow/";
+    private Integer gridPower;
+    private Boolean smartEnabled;
 
     @Inject
-    public HomeAssistantService(DevicesConfiguration devicesConfiguration, MQTTConfiguration mqttConfig) {
+    public HomeAssistantService(DevicesConfiguration devicesConfiguration, MQTTConfiguration mqttConfig, SmartConfiguration smartConfiguration) {
         this.objectMapper = new ObjectMapper();
         this.devicesConfiguration = devicesConfiguration;
         this.mqttConfig = mqttConfig;
+        this.smartConfiguration = smartConfiguration;
         powerstreamId = devicesConfiguration.getPowerstreams().getFirst();
         batteryId = devicesConfiguration.getBatteries().isEmpty()?null:devicesConfiguration.getBatteries().getFirst();
     }
@@ -59,7 +63,14 @@ public class HomeAssistantService implements ApplicationService {
 
                 @Override
                 public void messageArrived(String topic, MqttMessage mqttMessage) throws Exception {
-                    handlePowerMessage(mqttMessage);
+                    if (topic.equals(smartConfiguration.getMeterTopic())) {
+                        handleMeterMessage(mqttMessage);
+                    } else if (topic.equals(smartConfiguration.getEnabledTopic())) {
+                        handleEnabledMessage(mqttMessage);
+                    }
+                    else {
+                        handlePowerMessage(mqttMessage);
+                    }
                 }
 
                 @Override
@@ -69,6 +80,10 @@ public class HomeAssistantService implements ApplicationService {
             });
             haClient.connect(options);
             haClient.subscribe(targetTopic+powerstreamId+"/setpower", 1);
+            if (smartConfiguration.isEnabled()) {
+                haClient.subscribe(smartConfiguration.getMeterTopic(), 1);
+                haClient.subscribe(smartConfiguration.getEnabledTopic(), 1);
+            }
             if (haClient.isConnected()) {
                 if (mqttConfig.isEnableDiscovery()) {
                     publishHomeAssistantDiscovery();
@@ -80,6 +95,17 @@ public class HomeAssistantService implements ApplicationService {
         } catch (MqttException e) {
             LOG.error("Error starting MQTT bridge", e);
         }
+    }
+
+    private void handleEnabledMessage(MqttMessage mqttMessage) {
+        String str = new String(mqttMessage.getPayload(), StandardCharsets.UTF_8);
+        smartEnabled = str.equalsIgnoreCase("ON");
+    }
+
+    private void handleMeterMessage(MqttMessage mqttMessage) {
+        String str = new String(mqttMessage.getPayload(), StandardCharsets.UTF_8);
+        int value = Integer.parseInt(str);
+        gridPower = value;
     }
 
     private void handlePowerMessage(MqttMessage mqttMessage) throws MqttException {
@@ -275,5 +301,15 @@ public class HomeAssistantService implements ApplicationService {
         targetMessage.setRetained(true);
 
         haClient.publish(targetTopic+id+ "/state", targetMessage);
+    }
+
+    @Override
+    public Integer getGridPower() {
+        return gridPower;
+    }
+
+    @Override
+    public Boolean getSmartEnabled() {
+        return smartEnabled;
     }
 }

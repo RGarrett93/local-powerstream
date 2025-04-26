@@ -6,4 +6,6 @@ public interface ApplicationService {
     void setSl(ServiceLocator sl);
     boolean isOnline();
     void publishJsonState(String id, String json) throws MqttException;
+    Integer getGridPower();
+    Boolean getSmartEnabled();
 }

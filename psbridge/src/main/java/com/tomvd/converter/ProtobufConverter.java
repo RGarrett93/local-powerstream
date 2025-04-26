@@ -14,7 +14,7 @@ public class ProtobufConverter  {
     private static final Logger LOG = LoggerFactory.getLogger(ProtobufConverter.class);
 
     public InverterHeartbeat convert(byte[] data) {
-        LOG.info("Transforming binary data of size: {}", data.length);
+        //LOG.info("Transforming binary data of size: {}", data.length);
         HeaderMessage msgobj = null;
         try {
                 msgobj = HeaderMessage.parseFrom(data);
