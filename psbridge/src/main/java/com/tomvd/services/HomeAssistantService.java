@@ -104,8 +104,7 @@ public class HomeAssistantService implements ApplicationService {
 
     private void handleMeterMessage(MqttMessage mqttMessage) {
         String str = new String(mqttMessage.getPayload(), StandardCharsets.UTF_8);
-        int value = Integer.parseInt(str);
-        gridPower = value;
+        gridPower = (int)Double.parseDouble(str);
     }
 
     private void handlePowerMessage(MqttMessage mqttMessage) throws MqttException {
