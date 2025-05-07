@@ -77,9 +77,12 @@ public class EcoflowService implements DeviceService {
         }
         LOG.info("Starting MQTT bridge");
         try {
-            String mqttClientId = "psbridge";
+            String mqttClientId = "psbridge-ec";
             ecoflowClient = new MqttClient(mqttConfig.getEcoflow().getUrl(), mqttClientId);
-            MqttConnectOptions options = getMqttConnectOptions();
+            MqttConnectOptions options = new MqttConnectOptions();
+            options.setUserName(mqttConfig.getEcoflow().getUsername());
+            options.setPassword(mqttConfig.getEcoflow().getPassword() != null ? mqttConfig.getEcoflow().getPassword().toCharArray() : null);
+
             // Set up some callbacks
             ecoflowClient.setCallback(new MqttCallback() {
                 @Override
@@ -110,18 +113,6 @@ public class EcoflowService implements DeviceService {
         } catch (MqttException e) {
             LOG.error("Error starting MQTT bridge", e);
         }
-    }
-
-    private MqttConnectOptions getMqttConnectOptions() {
-        MqttConnectOptions options = new MqttConnectOptions();
-        if (mqttConfig.getEcoflow().getUsername() != null) {
-            options.setUserName(mqttConfig.getEcoflow().getUsername());
-            if (mqttConfig.getEcoflow().getPassword() != null) {
-                options.setPassword(mqttConfig.getEcoflow().getPassword() != null ? mqttConfig.getEcoflow().getPassword().toCharArray() : null);
-            }
-        }
-        options.setSocketFactory(Objects.requireNonNull(getSslContextTrustAll()).getSocketFactory());
-        return options;
     }
 
     @Override
@@ -206,56 +197,6 @@ public class EcoflowService implements DeviceService {
         } catch (IOException | MqttException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private static SSLContext getSslContextTrustAll( )
-    {
-        try
-        {
-            TrustManager[] trustAllCerts = new TrustManager [] {new X509ExtendedTrustManager() {
-                @Override
-                public void checkClientTrusted (X509Certificate[] chain, String authType, Socket socket) {
-
-                }
-
-                @Override
-                public void checkServerTrusted (X509Certificate [] chain, String authType, Socket socket) {
-
-                }
-
-                @Override
-                public void checkClientTrusted (X509Certificate [] chain, String authType, SSLEngine engine) {
-
-                }
-
-                @Override
-                public void checkServerTrusted (X509Certificate [] chain, String authType, SSLEngine engine) {
-
-                }
-
-                @Override
-                public java.security.cert.X509Certificate [] getAcceptedIssuers () {
-                    return null;
-                }
-
-                @Override
-                public void checkClientTrusted (X509Certificate [] certs, String authType) {
-                }
-
-                @Override
-                public void checkServerTrusted (X509Certificate [] certs, String authType) {
-                }
-
-            }};
-            SSLContext sslContext = SSLContext.getInstance( "TLS" );
-            sslContext.init( null, trustAllCerts, null );
-            return sslContext;
-        }
-        catch(KeyManagementException | NoSuchAlgorithmException e)
-        {
-            LOG.error( Thread.currentThread().getStackTrace()[1].getMethodName(), e );
-        }
-        return null;
     }
 
 }

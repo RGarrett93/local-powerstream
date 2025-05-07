@@ -8,4 +8,7 @@ public interface ApplicationService {
     void publishJsonState(String id, String json) throws MqttException;
     Integer getGridPower();
     Boolean getSmartEnabled();
+    Integer getSoc();
+    Boolean getChargerEnabled();
+    void setCharger(Boolean enabled);
 }

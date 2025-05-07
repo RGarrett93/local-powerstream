@@ -1,19 +1,22 @@
 services:
   mqtt:
-    image: eclipse-mosquitto:2.0.18-openssl
+    image: eclipse-mosquitto:2.0.21-openssl
     container_name: "mqtt"
     restart: always
     ports:
       - 8883:8883
+      - 1883:1883
     volumes:
-      - /home/user/mosquitto/data:/mosquitto/data
-      - /home/user/mosquitto/config:/mosquitto/config
-      - /home/user/mosquitto/logs:/mosquitto/log
+      - /home/haos/docker/mosquitto/data:/mosquitto/data
+      - /home/haos/docker/mosquitto/config:/mosquitto/config
+      - /home/haos/docker/mosquitto/logs:/mosquitto/log
   psbridge:
     image: ghcr.io/tomvd/psbridge:latest
     container_name: "psbridge"
     restart: always
     volumes:
-      - /home/user/psbridge/application.yml:/home/app/application.yml
+      - /home/haos/docker/psbridge/application.yml:/home/app/application.yml
     environment:
       MICRONAUT_CONFIG_FILES: '/home/app/application.yml'
+    depends_on:
+      - mqtt

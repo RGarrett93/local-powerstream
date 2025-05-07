@@ -29,6 +29,8 @@ public class HomeAssistantService implements ApplicationService {
     private final String targetTopic = "ecoflow/";
     private Integer gridPower;
     private Boolean smartEnabled;
+    private Integer soc;
+    private Boolean chargerEnabled;
 
     @Inject
     public HomeAssistantService(DevicesConfiguration devicesConfiguration, MQTTConfiguration mqttConfig, SmartConfiguration smartConfiguration) {
@@ -48,7 +50,7 @@ public class HomeAssistantService implements ApplicationService {
     @EventListener
     public void onStartup(StartupEvent event) {
         try {
-            String mqttClientId = "psbridge";
+            String mqttClientId = "psbridge-ha";
             haClient = new MqttClient(mqttConfig.getHomeAssistant().getUrl(), mqttClientId);
             MqttConnectOptions options = new MqttConnectOptions();
             options.setUserName(mqttConfig.getHomeAssistant().getUsername());
@@ -67,7 +69,9 @@ public class HomeAssistantService implements ApplicationService {
                         handleMeterMessage(mqttMessage);
                     } else if (topic.equals(smartConfiguration.getEnabledTopic())) {
                         handleEnabledMessage(mqttMessage);
-                    }
+                } else if (topic.equals(smartConfiguration.getSocTopic())) {
+                    handleSocMessage(mqttMessage);
+                }
                     else {
                         handlePowerMessage(mqttMessage);
                     }
@@ -83,6 +87,7 @@ public class HomeAssistantService implements ApplicationService {
             if (smartConfiguration.isEnabled()) {
                 haClient.subscribe(smartConfiguration.getMeterTopic(), 1);
                 haClient.subscribe(smartConfiguration.getEnabledTopic(), 1);
+                haClient.subscribe(smartConfiguration.getSocTopic(), 1);
             }
             if (haClient.isConnected()) {
                 if (mqttConfig.isEnableDiscovery()) {
@@ -104,14 +109,28 @@ public class HomeAssistantService implements ApplicationService {
 
     private void handleMeterMessage(MqttMessage mqttMessage) {
         String str = new String(mqttMessage.getPayload(), StandardCharsets.UTF_8);
-        gridPower = (int)Double.parseDouble(str);
+        try {
+            gridPower = (int) Double.parseDouble(str);
+        } catch (NumberFormatException e) {
+            gridPower = null;
+        }
     }
 
-    private void handlePowerMessage(MqttMessage mqttMessage) throws MqttException {
+    private void handlePowerMessage(MqttMessage mqttMessage) {
         String str = new String(mqttMessage.getPayload(), StandardCharsets.UTF_8);
         int value = Integer.parseInt(str);
         if (value >= 0 && value < 800) {
             sl.getDeviceService().publishPowerSetting(value);
+        }
+    }
+
+    private void handleSocMessage(MqttMessage mqttMessage) {
+        String str = new String(mqttMessage.getPayload(), StandardCharsets.UTF_8);
+        try {
+            soc = (int) Double.parseDouble(str);
+        }catch (NumberFormatException e) {
+            soc = null;
+            return;
         }
     }
 
@@ -310,5 +329,31 @@ public class HomeAssistantService implements ApplicationService {
     @Override
     public Boolean getSmartEnabled() {
         return smartEnabled;
+    }
+
+    @Override
+    public Integer getSoc() {
+        return soc;
+    }
+
+    @Override
+    public Boolean getChargerEnabled() {
+        return chargerEnabled;
+    }
+
+    @Override
+    public void setCharger(Boolean enabled) {
+        chargerEnabled = enabled;
+        // Publish to target broker
+        MqttMessage targetMessage = new MqttMessage();
+        targetMessage.setPayload(enabled?"on".getBytes(StandardCharsets.UTF_8):"off".getBytes(StandardCharsets.UTF_8));
+        targetMessage.setQos(1);
+        targetMessage.setRetained(true);
+
+        try {
+            haClient.publish(smartConfiguration.getChargerTopic(), targetMessage);
+        } catch (MqttException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

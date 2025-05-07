@@ -5,9 +5,18 @@ devices:
     - R621xxxxxxxxxxxx
 mqtt:
   ecoflow:
-    url: ssl://localhost:8883
+    url: tcp://localhost:1883
+    username: mosquitto
+    password: secret
   home-assistant:
     url: tcp://localhost:1883
     username: mosquitto
     password: secret
   enable-discovery: true
+smart:
+  enabled: true
+  meter-topic: smart/p1
+  enabled-topic: smart/enabled
+  charger-topic: smart/charger
+  soc-topic: smart/soc
+  max-power: 333
