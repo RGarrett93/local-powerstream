@@ -4,15 +4,11 @@ devices:
   batteries:
     - R621xxxxxxxxxxxx
 mqtt:
-  ecoflow:
-    url: tcp://localhost:1883
-    username: mosquitto
+  client:
+    server-uri: tcp://localhost:1883
+    user-name: mosquitto
     password: secret
-  home-assistant:
-    url: tcp://localhost:1883
-    username: mosquitto
-    password: secret
-  enable-discovery: true
+    enable-discovery: true
 smart:
   enabled: true
   meter-topic: smart/p1

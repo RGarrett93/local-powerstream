@@ -51,10 +51,10 @@ public class HomeAssistantService implements ApplicationService {
     public void onStartup(StartupEvent event) {
         try {
             String mqttClientId = "psbridge-ha";
-            haClient = new MqttClient(mqttConfig.getHomeAssistant().getUrl(), mqttClientId);
+            haClient = new MqttClient(mqttConfig.getServerUri(), mqttClientId);
             MqttConnectOptions options = new MqttConnectOptions();
-            options.setUserName(mqttConfig.getHomeAssistant().getUsername());
-            options.setPassword(mqttConfig.getHomeAssistant().getPassword() != null ? mqttConfig.getHomeAssistant().getPassword().toCharArray() : null);
+            options.setUserName(mqttConfig.getUserName());
+            options.setPassword(mqttConfig.getPassword() != null ? mqttConfig.getPassword().toCharArray() : null);
 
             haClient.setCallback(new MqttCallback() {
 

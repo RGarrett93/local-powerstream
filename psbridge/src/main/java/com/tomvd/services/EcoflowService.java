@@ -78,10 +78,10 @@ public class EcoflowService implements DeviceService {
         LOG.info("Starting MQTT bridge");
         try {
             String mqttClientId = "psbridge-ec";
-            ecoflowClient = new MqttClient(mqttConfig.getEcoflow().getUrl(), mqttClientId);
+            ecoflowClient = new MqttClient(mqttConfig.getServerUri(), mqttClientId);
             MqttConnectOptions options = new MqttConnectOptions();
-            options.setUserName(mqttConfig.getEcoflow().getUsername());
-            options.setPassword(mqttConfig.getEcoflow().getPassword() != null ? mqttConfig.getEcoflow().getPassword().toCharArray() : null);
+            options.setUserName(mqttConfig.getUserName());
+            options.setPassword(mqttConfig.getPassword() != null ? mqttConfig.getPassword().toCharArray() : null);
 
             // Set up some callbacks
             ecoflowClient.setCallback(new MqttCallback() {
