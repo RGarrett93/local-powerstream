@@ -74,7 +74,9 @@ A few tests later, I could control the device by creating my own protobuf messag
         return setMessage.toByteArray();
     }
 ````
-That is the code to create the payload. You just have to publish that to the /sys/.../thing/property/cmd topic. 
+That is the code to create the payload. You just have to publish that to the /sys/.../thing/property/cmd topic.
+
+Firmware: 1.1.4.61
 
 # psbridge - a small bridge app between the ecoflow mosquitto server and my home assistant mosquitto server
 This is more a matter of taste but I wanted to use tiny Java/micronaut app which is also easy to build and deploy as a container.

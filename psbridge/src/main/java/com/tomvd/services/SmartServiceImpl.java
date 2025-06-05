@@ -28,9 +28,14 @@ public class SmartServiceImpl implements SmartService {
         Boolean enabled = sl.getApplicationService().getSmartEnabled();
         Boolean chargerEnabled = sl.getApplicationService().getChargerEnabled();
         Integer soc = sl.getApplicationService().getSoc();
+        if (soc == null && data != null && data.currentPower() > 0) {
+            // as safety measure, if we lost connection with the battery - but are using it - stop using it.
+            sl.getDeviceService().publishPowerSetting(0);
+            return;
+        }
         if (data == null || gridPower == null || enabled == null || !enabled || soc == null) {return;}
 
-        if (soc < 20) {
+        if (soc < 13) {
             // battery soc dropped too low, make sure we shut off the inverter and dont do anything more
             if (data.currentPower() > 0) {
                 sl.getDeviceService().publishPowerSetting(0);
@@ -56,7 +61,7 @@ public class SmartServiceImpl implements SmartService {
         }
     }
 
-    @Scheduled(fixedDelay = "15s")
+    @Scheduled(fixedDelay = "60s")
     public void runCharger() {
         Integer gridPower = sl.getApplicationService().getGridPower();
         Boolean enabled = sl.getApplicationService().getSmartEnabled();
@@ -64,13 +69,13 @@ public class SmartServiceImpl implements SmartService {
         Integer soc = sl.getApplicationService().getSoc();
         if (gridPower == null || enabled == null || !enabled || soc == null) {return;}
 
-        // charger only takes 400-500w but we take some margin to avoid turning it on/off the whole time
-        if (soc < 100 && gridPower < -700 && (chargerEnabled == null || !chargerEnabled)) {
+        // charger only takes 400-500w but we take some 100W margin to avoid turning it on/off the whole time
+        if (soc < 95 && gridPower < -600 && (chargerEnabled == null || !chargerEnabled)) {
             sl.getApplicationService().setCharger(true);
             sl.getDeviceService().publishPowerSetting(0); // makes sure we are not charging and giving power
         }
         // if battery is full or we are using gridpower - turn charger off
-        if (soc == 100 || (gridPower > 100 && (chargerEnabled == null || chargerEnabled))) {
+        if (soc > 99 || (gridPower > 100 && (chargerEnabled == null || chargerEnabled))) {
             sl.getApplicationService().setCharger(false);
         }
     }
