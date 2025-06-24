@@ -24,9 +24,8 @@ public class HomeAssistantService implements ApplicationService {
     private final MQTTConfiguration mqttConfig;
     private final SmartConfiguration smartConfiguration;
     private ServiceLocator sl;
-    private final String powerstreamId;
     private final String batteryId;
-    private final String targetTopic = "ecoflow/";
+    private static final String TARGET_TOPIC = "ecoflow/";
     private Integer gridPower;
     private Boolean smartEnabled;
     private Integer soc;
@@ -38,7 +37,6 @@ public class HomeAssistantService implements ApplicationService {
         this.devicesConfiguration = devicesConfiguration;
         this.mqttConfig = mqttConfig;
         this.smartConfiguration = smartConfiguration;
-        powerstreamId = devicesConfiguration.getPowerstreams().getFirst();
         batteryId = devicesConfiguration.getBatteries().isEmpty()?null:devicesConfiguration.getBatteries().getFirst();
     }
 
@@ -56,50 +54,57 @@ public class HomeAssistantService implements ApplicationService {
             options.setUserName(mqttConfig.getUserName());
             options.setPassword(mqttConfig.getPassword() != null ? mqttConfig.getPassword().toCharArray() : null);
 
-            haClient.setCallback(new MqttCallback() {
-
-                @Override
-                public void connectionLost(Throwable throwable) {
-                    LOG.info("Disconnected from target broker: {}", throwable.toString());
-                }
-
-                @Override
-                public void messageArrived(String topic, MqttMessage mqttMessage) throws Exception {
-                    if (topic.equals(smartConfiguration.getMeterTopic())) {
-                        handleMeterMessage(mqttMessage);
-                    } else if (topic.equals(smartConfiguration.getEnabledTopic())) {
-                        handleEnabledMessage(mqttMessage);
-                } else if (topic.equals(smartConfiguration.getSocTopic())) {
-                    handleSocMessage(mqttMessage);
-                }
-                    else {
-                        handlePowerMessage(mqttMessage);
-                    }
-                }
-
-                @Override
-                public void deliveryComplete(IMqttDeliveryToken iMqttDeliveryToken) {
-
-                }
-            });
+            haClient.setCallback(getMqttCallback());
             haClient.connect(options);
-            haClient.subscribe(targetTopic+powerstreamId+"/setpower", 1);
+            devicesConfiguration.getPowerstreams().forEach(ps ->
+                    {
+                        try {
+                            haClient.subscribe(TARGET_TOPIC +ps+"/setpower", 1);
+                        } catch (MqttException e) {
+                            LOG.error("Error starting MQTT bridge", e);
+                        }
+                    }
+            );
             if (smartConfiguration.isEnabled()) {
                 haClient.subscribe(smartConfiguration.getMeterTopic(), 1);
                 haClient.subscribe(smartConfiguration.getEnabledTopic(), 1);
                 haClient.subscribe(smartConfiguration.getSocTopic(), 1);
             }
-            if (haClient.isConnected()) {
-                if (mqttConfig.isEnableDiscovery()) {
+            if (haClient.isConnected() && mqttConfig.isEnableDiscovery()) {
                     publishHomeAssistantDiscovery();
                     if (batteryId != null) {
                         publishHomeAssistantBatteryDiscovery(batteryId);
                     }
                 }
-            }
+
         } catch (MqttException e) {
             LOG.error("Error starting MQTT bridge", e);
         }
+    }
+
+    private MqttCallback getMqttCallback() {
+        return new MqttCallback() {
+            @Override
+            public void connectionLost(Throwable throwable) {
+                LOG.info("Disconnected from target broker: {}", throwable.toString());
+            }
+            @Override
+            public void messageArrived(String topic, MqttMessage mqttMessage) {
+                if (topic.equals(smartConfiguration.getMeterTopic())) {
+                    handleMeterMessage(mqttMessage);
+                } else if (topic.equals(smartConfiguration.getEnabledTopic())) {
+                    handleEnabledMessage(mqttMessage);
+                } else if (topic.equals(smartConfiguration.getSocTopic())) {
+                    handleSocMessage(mqttMessage);
+                } else {
+                    handlePowerMessage(mqttMessage, topic);
+                }
+            }
+            @Override
+            public void deliveryComplete(IMqttDeliveryToken iMqttDeliveryToken) {
+                // nothing
+            }
+        };
     }
 
     private void handleEnabledMessage(MqttMessage mqttMessage) {
@@ -116,11 +121,13 @@ public class HomeAssistantService implements ApplicationService {
         }
     }
 
-    private void handlePowerMessage(MqttMessage mqttMessage) {
+    private void handlePowerMessage(MqttMessage mqttMessage, String topic) {
         String str = new String(mqttMessage.getPayload(), StandardCharsets.UTF_8);
+        String[] parts = topic.split("/");
+        String deviceId = parts[1];
         int value = Integer.parseInt(str);
         if (value >= 0 && value < 800) {
-            sl.getDeviceService().publishPowerSetting(value);
+            sl.getDeviceService().publishPowerSetting(value, deviceId);
         }
     }
 
@@ -130,44 +137,48 @@ public class HomeAssistantService implements ApplicationService {
             soc = (int) Double.parseDouble(str);
         }catch (NumberFormatException e) {
             soc = null;
-            return;
         }
     }
 
     private void publishHomeAssistantDiscovery() {
+        devicesConfiguration.getPowerstreams().forEach(this::publishHomeAssistantDiscovery);
+    }
+
+    private void publishHomeAssistantDiscovery(String powerstreamId) {
+        String id = "ps"+(devicesConfiguration.getPowerstreams().indexOf(powerstreamId)+1);
         try {
             // Create Home Assistant discovery message
             ObjectNode discoveryInfo = objectMapper.createObjectNode();
-            discoveryInfo.put("state_topic", targetTopic+powerstreamId+"/state");
+            discoveryInfo.put("state_topic", TARGET_TOPIC +powerstreamId+"/state");
             discoveryInfo.put("qos", 2);
 
             ObjectNode device = discoveryInfo.putObject("dev");
             device.put("ids", powerstreamId);
-            device.put("name", "PowerStream1");
+            device.put("name", powerstreamId);
             device.put("mf", "EcoFlow");
             device.put("mdl", "PowerStream");
-            device.put("sw", ""); // TODO
+            device.put("sw", "");  // TODO
             device.put("sn", powerstreamId);
             device.put("hw", ""); // TODO
 
             // Add origin information
             ObjectNode origin = discoveryInfo.putObject("o");
             origin.put("name", "psbridge");
-            origin.put("sw", ""); // TODO
+            origin.put("sw", "0.1");
             origin.put("url", "https://github.com/tomvd/local-powerstream");
 
             // Add the description of the components within this device
             ObjectNode components = discoveryInfo.putObject("cmps");
             ObjectNode cmp0 = components.putObject("SetOutputWatts");
             cmp0.put("p", "number");
-            cmp0.put("command_topic", targetTopic+powerstreamId+"/setpower");
-            cmp0.put("state_topic", targetTopic+powerstreamId+"/state");
+            cmp0.put("command_topic", TARGET_TOPIC +powerstreamId+"/setpower");
+            cmp0.put("state_topic", TARGET_TOPIC +powerstreamId+"/state");
             cmp0.put("value_template", "{{ value_json.permanentWatts}}");
             cmp0.put("device_class", "power");
             cmp0.put("unit_of_measurement", "W");
             cmp0.put("min", 0);
             cmp0.put("max", 800);
-            cmp0.put("unique_id", "ps1_power_set");
+            cmp0.put("unique_id", id+"_power_set");
             cmp0.put("mode", "slider");
             cmp0.put("name", "SetOutputWatts");
 
@@ -177,7 +188,7 @@ public class HomeAssistantService implements ApplicationService {
             cmp1.put("device_class", "power");
             cmp1.put("unit_of_measurement", "W");
             cmp1.put("value_template", "{{ value_json.invOutputWatts}}");
-            cmp1.put("unique_id", "ps1_power_out");
+            cmp1.put("unique_id", id+"_power_out");
             cmp1.put("name", "OutputWatts");
 
             ObjectNode cmp2 = components.putObject("PermanentWatts");
@@ -185,7 +196,7 @@ public class HomeAssistantService implements ApplicationService {
             cmp2.put("device_class", "power");
             cmp2.put("unit_of_measurement", "W");
             cmp2.put("value_template", "{{ value_json.permanentWatts}}");
-            cmp2.put("unique_id", "ps1_permanent_watts");
+            cmp2.put("unique_id", id+"_permanent_watts");
             cmp2.put("name", "PermanentWatts");
 
             ObjectNode cmp3 = components.putObject("LlcTemp");
@@ -193,14 +204,14 @@ public class HomeAssistantService implements ApplicationService {
             cmp3.put("device_class", "temperature");
             cmp3.put("unit_of_measurement", "°C");
             cmp3.put("value_template", "{{ value_json.llcTemp}}");
-            cmp3.put("unique_id", "ps1_llc_temp");
+            cmp3.put("unique_id", id+"_llc_temp");
 
             ObjectNode cmp4 = components.putObject("pv1InputVolt");
             cmp4.put("p", "sensor");
             cmp4.put("device_class", "voltage");
             cmp4.put("unit_of_measurement", "V");
             cmp4.put("value_template", "{{ value_json.pv1InputVolt}}");
-            cmp4.put("unique_id", "ps1_pv1_volt");
+            cmp4.put("unique_id", id+"_pv1_volt");
             cmp4.put("name", "pv1InputVolt");
 
             ObjectNode cmp5 = components.putObject("pv1InputCur");
@@ -208,7 +219,7 @@ public class HomeAssistantService implements ApplicationService {
             cmp5.put("device_class", "current");
             cmp5.put("unit_of_measurement", "A");
             cmp5.put("value_template", "{{ value_json.pv1InputCur}}");
-            cmp5.put("unique_id", "ps1_pv1_cur");
+            cmp5.put("unique_id", id+"_pv1_cur");
             cmp5.put("name", "pv1InputCur");
 
             ObjectNode cmp6 = components.putObject("pv2InputVolt");
@@ -216,7 +227,7 @@ public class HomeAssistantService implements ApplicationService {
             cmp6.put("device_class", "voltage");
             cmp6.put("unit_of_measurement", "V");
             cmp6.put("value_template", "{{ value_json.pv2InputVolt}}");
-            cmp6.put("unique_id", "ps1_pv2_volt");
+            cmp6.put("unique_id", id+"_pv2_volt");
             cmp6.put("name", "pv2InputVolt");
 
             ObjectNode cmp7 = components.putObject("pv2InputCur");
@@ -224,7 +235,7 @@ public class HomeAssistantService implements ApplicationService {
             cmp7.put("device_class", "current");
             cmp7.put("unit_of_measurement", "A");
             cmp7.put("value_template", "{{ value_json.pv2InputCur}}");
-            cmp7.put("unique_id", "ps1_pv2_cur");
+            cmp7.put("unique_id", id+"_pv2_cur");
             cmp7.put("name", "pv2InputCur");
 
             // Discovery topic format: homeassistant/device/HWxxx/config
@@ -247,7 +258,7 @@ public class HomeAssistantService implements ApplicationService {
         try {
             // Create Home Assistant discovery message
             ObjectNode discoveryInfo = objectMapper.createObjectNode();
-            discoveryInfo.put("state_topic", targetTopic+batteryId+"/state");
+            discoveryInfo.put("state_topic", TARGET_TOPIC +batteryId+"/state");
             discoveryInfo.put("qos", 2);
 
             ObjectNode device = discoveryInfo.putObject("dev");
@@ -276,7 +287,7 @@ public class HomeAssistantService implements ApplicationService {
             cmp0.put("unit_of_measurement", "W");
             cmp0.put("min", 0);
             cmp0.put("max", 800);
-            cmp0.put("unique_id", "ps1_power_set");
+            cmp0.put("unique_id", id+"_power_set");
             cmp0.put("mode", "slider");
             cmp0.put("name", "SetOutputWatts");
 
@@ -318,7 +329,7 @@ public class HomeAssistantService implements ApplicationService {
         targetMessage.setQos(1);
         targetMessage.setRetained(true);
 
-        haClient.publish(targetTopic+id+ "/state", targetMessage);
+        haClient.publish(TARGET_TOPIC +id+ "/state", targetMessage);
     }
 
     @Override
@@ -346,7 +357,7 @@ public class HomeAssistantService implements ApplicationService {
         chargerEnabled = enabled;
         // Publish to target broker
         MqttMessage targetMessage = new MqttMessage();
-        targetMessage.setPayload(enabled?"on".getBytes(StandardCharsets.UTF_8):"off".getBytes(StandardCharsets.UTF_8));
+        targetMessage.setPayload(Boolean.TRUE.equals(enabled)?"on".getBytes(StandardCharsets.UTF_8):"off".getBytes(StandardCharsets.UTF_8));
         targetMessage.setQos(1);
         targetMessage.setRetained(true);
 

@@ -23,6 +23,7 @@ public class SmartServiceImpl implements SmartService {
 
     @Scheduled(fixedDelay = "6s")
     public void run() {
+        if (!config.isEnabled()) return;
         PowerStreamData data = sl.getDeviceService().getPowerStreamData();
         Integer gridPower = sl.getApplicationService().getGridPower();
         Boolean enabled = sl.getApplicationService().getSmartEnabled();
@@ -63,6 +64,7 @@ public class SmartServiceImpl implements SmartService {
 
     @Scheduled(fixedDelay = "60s")
     public void runCharger() {
+        if (!config.isEnabled()) return;
         Integer gridPower = sl.getApplicationService().getGridPower();
         Boolean enabled = sl.getApplicationService().getSmartEnabled();
         Boolean chargerEnabled = sl.getApplicationService().getChargerEnabled();

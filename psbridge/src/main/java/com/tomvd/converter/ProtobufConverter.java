@@ -85,7 +85,7 @@ public class ProtobufConverter  {
     not sure what this message is to be honest. It is sent by the ecoflow mqtt server the moment a device connects to it.
     And it seems to keep the device chatting. Otherwise it falls back to a very slow rate of 48seconds status updates
      */
-    public byte[] convertHB() {
+    public byte[] convertHeartBeat() {
         SendMsgHart sendMsgHart = com.tomvd.psbridge.SendMsgHart.newBuilder()
                 .setLinkId(15)
                 .setSrc(32)
