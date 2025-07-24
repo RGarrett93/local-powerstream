@@ -1,0 +1,50 @@
+name: MQTT TLS Honeypot
+version: "1.0.0"
+slug: mqtt_honeypot
+description: A simple MQTT-over-TLS honeypot capturing credentials and packets.
+url: https://github.com/tomvd/local-powerstream/tree/main/honeypot
+startup: services
+init: false
+host_network: true
+privileged: []
+map:
+  - config
+  - ssl
+tmpfs: false
+full_access: false
+ingress: false
+
+options:
+  port: 8883
+  cert_path: "ssl/certificate.pem"
+  key_path: "ssl/key.pem"
+
+ports:
+  8883/tcp: 8883
+
+schema:
+  port: int
+  cert_path: str
+  key_path: str
+
+# UI Translations
+configuration:
+  port:
+    name: "Listen Port"
+    description: "TCP port for incoming MQTT TLS connections."
+  cert_path:
+    name: "Certificate Path"
+    description: "Path to TLS certificate inside add-on (e.g., ssl/certificate.pem)."
+  key_path:
+    name: "Key Path"
+    description: "Path to TLS key inside add-on (e.g., ssl/key.pem)."
+
+network:
+  "8883/tcp": "MQTT TLS port"
+
+arch:
+  - amd64
+  - aarch64
+  - armv7
+  - armhf
+  - i386
